@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mask Wearing Detection System</title>
+
+  <!-- ✅ โหลด TensorFlow.js สำหรับใช้งานโมเดล AI -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+
+  <!-- ✅ โหลดไลบรารี Teachable Machine สำหรับจำแนกภาพ -->
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js"></script>
+
+  <style>
+    /* ✅ กำหนดขนาดของ video ให้พอดีกับโมเดล (224x224) */
+    video {
+      width: 224px;
+      height: 224px;
+    }
+  </style>
+</head>
+<body>
+  <h2>ระบบตรวจจับการใส่หน้ากากอนามัย</h2>
+
+  <!-- 🔄 ปุ่มสำหรับสลับกล้องหน้า ↔ กล้องหลัง -->
+  <button onclick="switchCamera()">🔄 สลับกล้อง</button>
+
+  <!-- ▶️ ปุ่มเริ่มต้นใช้งานกล้องและโหลดโมเดล -->
+  <button onclick="start()">▶️ เริ่มกล้อง</button>
+  <br><br>
+
+  <!-- 🎥 จุดแสดงภาพจากกล้อง (ใช้ video tag แบบปกติ) -->
+  <video id="video" autoplay muted playsinline></video>
+
+  <!-- 📊 จุดแสดงผลการจำแนกภาพจากโมเดล AI -->
+  <div id="label-container"></div>
+
+  <script>
+    // 🔗 ลิงก์โมเดลจาก Teachable Machine ที่เราเทรนไว้
+    const MODEL_URL = "";
+
+    let model, video, labelContainer, maxPredictions;
+
+    // 🔁 เริ่มต้นที่กล้องหน้า (user), จะสลับเป็น "environment" หากผู้ใช้กดปุ่ม
+    let currentFacingMode = "user";
+
+    // ✅ โหลดโมเดลจาก Teachable Machine
+    async function loadModel() {
+      model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+      maxPredictions = model.getTotalClasses();
+
+      // เตรียมพื้นที่แสดงผลลัพธ์แต่ละคลาส
+      labelContainer = document.getElementById("label-container");
+      labelContainer.innerHTML = "";
+      for (let i = 0; i < maxPredictions; i++) {
+        labelContainer.appendChild(document.createElement("div"));
+      }
+    }
+
+    // ✅ ฟังก์ชันสำหรับเปิดกล้องด้วย facingMode (หน้า/หลัง)
+    async function startCamera() {
+      // ❌ ถ้ามีกล้องเปิดอยู่ก่อนหน้านี้ ให้ปิดก่อน
+      if (video && video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+      }
+
+      // ✅ กำหนดเงื่อนไขสำหรับเลือกกล้อง (หน้า/หลัง)
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: currentFacingMode // "user" = กล้องหน้า, "environment" = กล้องหลัง
+        }
+      };
+
+      // ✅ ขอเปิดกล้องตาม facingMode ที่กำหนด
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // แสดงกล้องใน <video>
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        video.play();
+        predictLoop(); // เริ่มทำนายต่อเนื่อง
+      };
+    }
+
+    // 🔁 ฟังก์ชันทำนายภาพจากกล้องแบบ real-time
+    async function predictLoop() {
+      if (!model) return;
+
+      // ส่งวิดีโอเข้าโมเดลเพื่อทำนาย
+      const prediction = await model.predict(video);
+
+      // วนลูปแสดงผลลัพธ์ของแต่ละคลาส
+      for (let i = 0; i < maxPredictions; i++) {
+        const p = prediction[i];
+        labelContainer.childNodes[i].innerText = `${p.className}: ${(p.probability * 100).toFixed(2)}%`;
+      }
+
+      // ทำซ้ำตลอดเวลา
+      requestAnimationFrame(predictLoop);
+    }
+
+    // ▶️ ฟังก์ชันเริ่มใช้งาน (โหลดโมเดลและกล้อง)
+    async function start() {
+      await loadModel();
+      await startCamera();
+    }
+
+    // 🔄 ฟังก์ชันสำหรับสลับกล้องหน้า ↔ หลัง
+    function switchCamera() {
+      currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+      startCamera(); // เปิดกล้องใหม่ตามกล้องที่เลือก
+    }
+
+    // เตรียมตัวแปร <video> สำหรับแสดงกล้อง
+    video = document.getElementById("video");
+  </script>
+</body>
+</html>
